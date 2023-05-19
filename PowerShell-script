@@ -1,0 +1,172 @@
+# Koble til Azure
+Connect-AzAccount
+$tenants = Get-AzTenant
+Get-AzContext
+Set-AzContext
+# Ny management groups 
+New-AzManagementGroup -GroupId 'mg-it-tmp' -DisplayName 'MGMT IT TMP'
+
+
+# Lag Hierarki
+$parentGroup = Get-AzManagementGroup -Group 'mg-it-tmp'
+New-AzManagementGroup -GroupID 'mg-it-prod-tmp' -ParentId $parentGroup.id
+New-AzManagementGroup -GroupID 'mg-it-dev-tmp' -ParentId $parentGroup.id 
+New-AzManagementGroup -GroupID 'mg-it-test-tmp' -ParentId $parentGroup.id 
+
+Get-AzManagementGroup  | ft
+
+
+# Opprette Ressurser -Variable med navn vi skal bruke senere 
+$rgname ="rg-undervisning-demo-01"
+$location ="norwyeast"
+$saname = "sttim001"
+$fsname ="fs-demo-01-norwayeast"
+$shareName = "myshare"
+
+# Opprette Resourse Groupe 
+New-AzResourceGroup -Name "rg-undervisning-demo-001" -Location "norwayeas"
+New-AzResourceGroup -Name $rgname -Location $location
+New-AzResourceGroup -Name "rg-lektur-demo-001" -Location "norwayeast"
+New-AzResourceGroup -Name "rg-praktisk-001" -Location "norwayeast"
+New-AzResourceGroup -Name "rg-Pro-001" -Location "norwayeast"
+New-AzResourceGroup-Name "rg-bruker-002" -Location "norwayeast"
+
+Get-AzResourceGroup  | ft 
+
+# Oppretter Storage account 
+# Om hjelp: Get-help New-AzStorageAccount -online
+ New-AzStorageAccount -ResourceGroupName $rgname`
+ -Name $saname `
+ -Location $rgname`
+ -SkuName Standard_LRV `
+ -Kind StorageV2
+$ctx = (Get-AzStorageAccount -ResourceGroupName $rgname -Name $saname).Context
+$fileshare = New-AzStorageAccount .Context $ctx -Name $fsname
+
+New-AzStorageAccount -ResourceGroupName "rg-Pro-001" -Name "sttim002" -Location "norwayeast" -SkuName "Standard_LRS" -Kind StorageV2
+New-AzStorageAccount -ResourceGroupName "rg-bruker" -Name "sttim003" -Location "norwayeast" -SkuName "Standard_LRS" -Kind StorageV2
+New-AzStorageAccount -ResourceGroupName "rg-lektur" -Name "sttim004" -Location "norwayeast" -SkuName "Standard_LRS" -Kind StorageV2
+New-AzStorageAccount -ResourceGroupName "rg-Praktisk-001" -Name "sttim5" -Location "norwayeast" -SkuName "Standard_LRS" -Kind StorageV2
+
+Get-AzStorageAccount | ft 
+
+
+
+# Tags 
+# Get-Help New-AzTags -Online
+$Tags = @{"costventer"= "12345"; "owner"= "sarah-moniboss23@outlook.com"}
+# Hente id til resource group
+$rginfo = Get-AzResourceGroup -Name rg-Pro-001 
+# Setter Tags på Resource Group 
+# Merk et en overskriver eksisterend Tags med samme kommando
+New-AzTag -Tag $Tags -ResourceId $rginfo.ResourceId
+Set-AzResourceGroup -Name $rgname -Tag $tags
+
+# Erstatt eller oppdater
+$Tags = @{"department"="it"}
+Update-AzTag -ResourceId $rginfo.ResourceId -Tag $Tags -Operation Merge
+
+# For å liste ut alle Resourse Croup eller Resourse basert på Tag
+Get-AzResourceGroup -Tag @{'owner'='sarah-moniboss23@outlook.com'} | ft
+Get-AzResource -Tag @{'owner'='sarah-moniboss23@outlook.com' } | ft
+
+
+<# Create Users in Azure 
+Get-Help New-AzADUser -Online
+Get-Help Get-AzDUser -Online
+Get-help Update-AzDUser -Online
+Get-Help Remove-AzDUser -Online
+Get-Help Import-Csv -Online#>
+
+$newUsers = Import-Csv .\Testbruker.csv
+
+foreach ($user in $newUsers) {
+    $SecureStringPassword = ConvertTo-SecureString -String $user.Password -AsPlainText -Force
+    New-AzADUser -DisplayName $user.DisplayName `
+        -UserPrincipalName $user.UserPrincipalName `
+        -Password $SecureStringPassword `
+        -MailNickname $user.MailNickName
+}
+
+ foreach($user in $newUsers){
+    $usercheck=Get-AzADUser -UserPrincipalName $user-UserPrincipalName
+    if (!$usercheck) {
+        Write-Host "User $user.UserPrincipalName not found. Creating user $user.UserPrincipalName" -ForegroundColor Green
+        $SecureStringPassword = ConvertTo-ScriptExtent -Strng $user.Password -AsPlainText -Force 
+        New-AzDUser -DisplayName $user.DisplayName `
+        -UserPrincipalName $user.UserPrincipalName `
+        -Password $SecureStringPassword `
+        -MailNickname $user.MailNickName
+
+    }
+    if ($usercheck) {
+        Write-Host "User $user.UserPrincipalName found. User not created but will be updated with information from Csv" -ForegroundColor Green
+        # Update-AzDUser
+        # Her skal valge om en skal oppdatere informasjon til allerede eksisterende brukere. 
+        # Remove-AzUDUser -UserPrincipalName $user.UserPrincipalName -Confirm:$false
+
+    }
+ }
+
+
+ <# Tildel rolle til bruker 
+    New-AzRoleassignment
+    Get-AzRolassignment
+    Remove-AzRoleassignment
+ #>
+ # For å finne rollene
+ $roledef = Get-AzRoleDefinition # veldig lang liste
+ Get-AzRoleDefinition | Where-Object -Property Name -eq 'Owner'
+ Get-AzRoleDefinition | Where-Object -Property Name -eq 'Reader'
+ Get-AzRoleDefinition | Where-Object -Property Name -like 'Monito*'
+
+ $location = 'norwayeast'
+ $rgrbac = 'rg-demo-rbac'
+ $rbacgroup = 's_demogroup-rbac'
+
+ New-AzResourceGroup -Name $rgrbac -Location $location
+ $newgroup = new-azdgroup -DisplayName $rbacgroup -MailNickname $rbacgroup
+ $newgroup
+
+ $demouser = Get-AzADUser -UserPrincipalName 'karina.Normann@azdemo1undervisning.onmicrosoft.com'
+
+
+ # Locks 
+ $rglocks = 'rg-demo-lock'
+ $location = 'norwayeast'
+ $rglockname = 'RG-Lock'
+
+ 1..5 |foreach {
+    New-AzResourceGroup -Name $rglocks$_ -Location $location
+ }
+
+ 
+
+ $storageaccount = Nes-AzStorageAccount -ResourceGroupName "rg-demo-lock1" `
+   -Name "sttim005" `
+   -Location $location `
+   -SkuiName Standard_RAGRS
+   -Kind StorageV2
+
+   # -Locklevel Accepted 
+   1..5 | foreach {
+    New-AzResourceLock -LockLevel CanNotDelete -LockName $rglockname -ResourceGroupName $rglocks
+   }
+
+
+Get-AzResourceLock
+
+# List ut basert på porarty ResourceName
+Get-AzResourceLock
+$getlock = Get-AzResourceLock | Where-Object -Property resourcename -eq 'RG-Lock'
+$getlock.ResourceGroupName
+
+$getlock  | foreach {
+    Remove-AzResourceLock -LockName 'RG-lock'
+    -ResourceGroupName $_.ResourceGroupName -Force
+} 
+
+# Fjerne Lock
+Remove-AzResourceLock `
+    -LockName 'RG-Lock' `
+    -ResourceGroupName $rglocks
